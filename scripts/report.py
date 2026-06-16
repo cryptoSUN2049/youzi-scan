@@ -513,22 +513,22 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 </div></section>
 
 <section>
-<div class="sec-h"><span class="n">03</span><h2>{T["s03"]}</h2><span class="desc">{T["s03d"]}</span></div>
+<div class="sec-h"><span class="n">07</span><h2>{T["s03"]}</h2><span class="desc">{T["s03d"]}</span></div>
 {pools["ambush"] or f'<div class="note">{T["e03"]}</div>'}
 </section>
 
 <section>
-<div class="sec-h"><span class="n">04</span><h2>{T["s04"]}</h2><span class="desc">{T["s04d"]}</span></div>
+<div class="sec-h"><span class="n">07</span><h2>{T["s04"]}</h2><span class="desc">{T["s04d"]}</span></div>
 {pools["dip"] or f'<div class="note">{T["e04"]}</div>'}
 </section>
 
 <section>
-<div class="sec-h"><span class="n">05</span><h2>{T["s05"]}</h2><span class="desc">{T["s05d"]}</span></div>
+<div class="sec-h"><span class="n">07</span><h2>{T["s05"]}</h2><span class="desc">{T["s05d"]}</span></div>
 {pools["halfway"] or f'<div class="note">{T["e05"]}</div>'}
 </section>
 
 <section>
-<div class="sec-h"><span class="n">06</span><h2>{T["s06"]}</h2><span class="desc">{T["s06d"]}</span></div>
+<div class="sec-h"><span class="n">07</span><h2>{T["s06"]}</h2><span class="desc">{T["s06d"]}</span></div>
 {pools["chase"] or f'<div class="note">{T["e06"]}</div>'}
 </section>
 
@@ -542,7 +542,7 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 </section>
 
 <section>
-<div class="sec-h"><span class="n">08</span><h2>{T["s08"]}</h2></div>
+<div class="sec-h"><span class="n">10</span><h2>{T["s08"]}</h2></div>
 <div class="grid2">
 <div class="warn-box"><b>{T["r1t"]}</b><br>{T["r1"]}</div>
 <div class="warn-box"><b>{T["r2t"]}</b><br>{T["r2"]}</div>
