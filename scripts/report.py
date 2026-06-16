@@ -227,8 +227,110 @@ def _full_row(r, T):
 </tr>'''
 
 
+SETUP_EN = {"低吸/回踩MA10": "Dip/MA10 pullback", "打板/涨停": "Limit-up board", "突破新高": "Breakout high",
+            "潜伏/低位缩量": "Ambush/low dry-vol", "半路/放量": "Halfway/vol-spike"}
+
+
+def _macro_section(macro, lang):
+    if not macro:
+        return ""
+    zh = lang != "en"
+    LB = {"h": "大盘 · 外盘 · 全球新闻" if zh else "Markets & global news",
+          "d": "宏观背景(行情数据 datahub · 新闻搜索)" if zh else "macro backdrop",
+          "a": "A股大盘" if zh else "A-share indices", "g": "外盘" if zh else "Global",
+          "n": "重大新闻" if zh else "Key news", "r": "解读" if zh else "Read", "w": "权重" if zh else "wt"}
+    idx = "".join(f'<span class="chip"><b>{i["name"]}</b> {i["close"]} <span class="{ "up" if (i["pct"] or 0)>0 else "down"}">{i["pct"]:+}%</span></span>' for i in macro.get("indices", []))
+    glob = "".join(f'<span class="chip"><b>{g["name"]}</b> {g["val"]} <span style="color:var(--txt3)">{g["note"]}</span></span>' for g in macro.get("global", []))
+    news = "".join(f'<div class="news-row"><span class="news-tag">{n["tag"]}</span>{n["t"]}</div>' for n in macro.get("news", []))
+    read = macro.get("read", "")
+    return f'''<section>
+<div class="sec-h"><span class="n">◎</span><h2>{LB["h"]}</h2><span class="desc">{LB["d"]}</span></div>
+<div class="mac-row"><span class="mac-l">{LB["a"]}</span>{idx}</div>
+<div class="mac-row"><span class="mac-l">{LB["g"]}</span>{glob}</div>
+<div class="kbox" style="margin-top:10px"><div class="kl">{LB["n"]}</div>{news}</div>
+<div class="kbox gold" style="margin-top:10px"><div class="kl">{LB["r"]}</div><div style="font-size:12px;color:var(--txt2)">{read}</div></div>
+</section>'''
+
+
+def _patterns_section(patterns, lang):
+    if not patterns:
+        return ""
+    zh = lang != "en"
+    LB = {"h": "最佳赚钱模式 · 真实回测" if zh else "Best patterns · real backtest",
+          "d": (f"{patterns.get('n_samples')}样本 / {patterns.get('n_stocks')}只 / {patterns.get('window_days')}天窗口 · close-to-close前向收益" if zh
+                else f"{patterns.get('n_samples')} samples / {patterns.get('n_stocks')} stocks / {patterns.get('window_days')}d"),
+          "setup": "入场模式" if zh else "Setup", "n": "样本" if zh else "n",
+          "note": ("胜率=收正比例,均值=平均收益。越往右(T+5)越偏波段。" if zh else "win=% positive, avg=mean return.")}
+    def setlabel(s):
+        return s if zh else SETUP_EN.get(s, s)
+    rows = ""
+    for s, st in sorted(patterns.get("by_setup", {}).items(), key=lambda kv: -kv[1]["t3"]["win"]):
+        rows += (f'<tr><td>{setlabel(s)}</td><td class="num">{st["n"]}</td>'
+                 + "".join(f'<td class="num"><b>{st[h]["win"]}%</b> <span style="color:var(--txt3)">{st[h]["avg"]:+.1f}%</span></td>' for h in ("t1", "t3", "t5"))
+                 + "</tr>")
+    combos = sorted(patterns.get("by_combo", {}).items(), key=lambda kv: -kv[1]["t3"]["win"])[:8]
+    crows = ""
+    for k, st in combos:
+        kk = k if zh else " @ ".join([SETUP_EN.get(p.strip(), p.strip()) for p in k.split("@")])
+        crows += (f'<tr><td>{kk}</td><td class="num">{st["n"]}</td>'
+                  + "".join(f'<td class="num"><b>{st[h]["win"]}%</b> <span style="color:var(--txt3)">{st[h]["avg"]:+.1f}%</span></td>' for h in ("t1", "t3", "t5"))
+                  + "</tr>")
+    return f'''<section>
+<div class="sec-h"><span class="n">▲</span><h2>{LB["h"]}</h2><span class="desc">{LB["d"]}</span></div>
+<div class="grid2">
+<div class="tbl-wrap"><table><thead><tr><th>{LB["setup"]}</th><th>{LB["n"]}</th><th>T+1</th><th>T+3</th><th>T+5</th></tr></thead><tbody>{rows}</tbody></table></div>
+<div class="tbl-wrap"><table><thead><tr><th>{("模式×板块 TOP8" if zh else "Setup×Sector TOP8")}</th><th>{LB["n"]}</th><th>T+1</th><th>T+3</th><th>T+5</th></tr></thead><tbody>{crows}</tbody></table></div>
+</div>
+<div class="note" style="margin-top:8px">{LB["note"]}</div></section>'''
+
+
+def _top10_section(rows, lang):
+    zh = lang != "en"
+    LB = {"h": "TOP10 精选" if zh else "TOP10 picks", "d": "综合评分前10(潜伏/低吸优先)" if zh else "by composite score"}
+    # prefer actionable tactics, then score
+    rank = {"ambush": 0, "dip": 1, "halfway": 2, "chase": 3, "watch": 4, "high": 5, "avoid": 6}
+    top = sorted(rows, key=lambda r: (rank.get(r["tactic"], 9), -r.get("score", 0)))[:10]
+    cards = ""
+    for i, r in enumerate(top, 1):
+        cards += f'<div class="t10"><span class="t10-r">{i}</span>{_card(r, L[lang])}</div>'
+    return f'''<section>
+<div class="sec-h"><span class="n">★</span><h2>{LB["h"]}</h2><span class="desc">{LB["d"]}</span></div>
+<div class="picks">{cards}</div></section>'''
+
+
+def _exec_summary(rows, sentiment, macro, patterns, lang):
+    zh = lang != "en"
+    T = L[lang]
+    v_head, _ = sentiment_verdict(sentiment, T)
+    # best pattern
+    best = ""
+    if patterns and patterns.get("by_setup"):
+        bs = max(patterns["by_setup"].items(), key=lambda kv: kv[1]["t3"]["win"])
+        nm = bs[0] if zh else SETUP_EN.get(bs[0], bs[0])
+        best = (f"{nm} T+3胜率{bs[1]['t3']['win']}%/均值{bs[1]['t3']['avg']:+.1f}%、T+5 {bs[1]['t5']['win']}%/{bs[1]['t5']['avg']:+.1f}%" if zh
+                else f"{nm}: T+3 win {bs[1]['t3']['win']}%/{bs[1]['t3']['avg']:+.1f}%, T+5 {bs[1]['t5']['win']}%/{bs[1]['t5']['avg']:+.1f}%")
+    rank = {"ambush": 0, "dip": 1}
+    picks = [r for r in sorted(rows, key=lambda r: (rank.get(r["tactic"], 9), -r.get("score", 0))) if r["tactic"] in ("ambush", "dip")][:5]
+    pick_s = "、".join(f"{r['name']}({r['code'][:6]})" for r in picks)
+    cnt = Counter(r["tactic"] for r in rows)
+    if zh:
+        body = (f"<b>① 周期</b>:{v_head}。<b>② 宏观</b>:{(macro or {}).get('read','')[:90]}…<br>"
+                f"<b>③ 最佳模式(回测)</b>:{best}——<b>低吸>追涨、T+3/T+5>T+1</b>。<br>"
+                f"<b>④ 操作</b>:T+3条件下,优先在 <b>CCL/PCB/材料</b> 做<b>缩量回踩MA10低吸</b>;潜伏池({cnt.get('ambush',0)}只)埋伏等催化。<br>"
+                f"<b>⑤ 重点票</b>:{pick_s}。")
+        head = "结论先行 · 一句话操作纲领"
+    else:
+        body = (f"<b>① Cycle</b>: {v_head}. <b>② Best pattern</b>: {best} — dip>chase, T+3/T+5>T+1. "
+                f"<b>③ Play</b>: under T+3, dip-buy MA10 pullbacks in CCL/PCB/Materials. <b>Picks</b>: {pick_s}.")
+        head = "Executive summary"
+    return f'''<section>
+<div class="sec-h"><span class="n">00</span><h2>{head}</h2></div>
+<div class="kbox red" style="border-left-width:4px"><div style="font-size:12.5px;color:var(--txt);line-height:1.7">{body}</div></div></section>'''
+
+
 def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
-           sentiment=None, sent_asof=None, sent_fresh=False, stats=None, freshness=None, lang="zh"):
+           sentiment=None, sent_asof=None, sent_fresh=False, stats=None, freshness=None, lang="zh",
+           macro=None, patterns=None):
     T = L.get(lang, L["zh"])
     sentiment = sentiment or []
     stats = stats or {}
@@ -267,6 +369,10 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
 
     pools = {t: _section_cards(rows, t, T) for t in ["ambush", "dip", "halfway", "chase"]}
     tc = T["tc"]
+    intel = (_exec_summary(rows, sentiment, macro, patterns, lang)
+             + _macro_section(macro, lang)
+             + _patterns_section(patterns, lang)
+             + _top10_section(rows, lang))
 
     html = f'''<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -338,6 +444,13 @@ tr.grp td{{background:#0c1119;color:var(--cyan);font-weight:700;font-size:11.5px
 .ind-c h4{{font-size:12.5px;color:var(--cyan);margin-bottom:5px;}}
 .ind-c p{{font-size:11px;color:var(--txt2);}}
 footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;color:var(--txt3);}}
+.kbox.red{{border-left-color:var(--up);}}
+.mac-row{{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:7px;}}
+.mac-l{{font-size:11px;color:var(--cyan);font-weight:700;min-width:52px;}}
+.news-row{{font-size:11.5px;color:var(--txt2);padding:5px 0;border-bottom:1px solid var(--line);line-height:1.5;}}
+.news-row:last-child{{border-bottom:none;}}
+.news-tag{{font-size:9.5px;padding:1px 6px;border-radius:7px;background:#13294a;color:#7fb0ff;margin-right:6px;font-weight:700;}}
+.t10{{position:relative;}} .t10-r{{position:absolute;left:-3px;top:-7px;z-index:3;background:var(--gold);color:#0a0e14;border-radius:50%;width:21px;height:21px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-weight:800;font-size:12px;}}
 </style></head><body>
 <header>
 <div class="eyebrow">{T["eyebrow"]}</div>
@@ -359,7 +472,7 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 <span class="tac-pill" style="background:#161d28;color:var(--txt3)">{T["tactic"]["watch"]} {cc('watch')}</span>
 </div></header>
 <div class="wrap">
-
+{intel}
 <section>
 <div class="sec-h"><span class="n">01</span><h2>{T["s01"]}</h2><span class="desc">{T["s01d"]} · {fresh_badge}</span></div>
 <div class="tbl-wrap" style="margin-bottom:12px"><table>

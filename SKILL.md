@@ -23,6 +23,37 @@ python3 scan.py \
 
 Output: `<out>/<title>-youzi-scan-<date>.html`
 
+## Full "market intelligence" report (conclusion-first + macro + backtest + TOP10)
+
+For a complete report — executive summary, A-share + global markets + news, a real
+T+1/T+3/T+5 win-rate backtest, and a TOP10 — run these THREE steps. **Step 1 is done by
+Claude (the agent), not the Python**, because web search is a Claude-Code tool the script
+can't call. This is how the skill incorporates Claude Code's built-in search:
+
+```
+# 1) MACRO + NEWS  — Claude runs WebSearch (大盘/外盘/全球新闻/公告), writes a macro JSON:
+#    {"date","indices":[{name,close,pct}], "global":[{name,val,note}],
+#     "news":[{tag,t,w}], "read":"one-paragraph 解读"}
+#    (A-share indices can instead come from datahub daily_market_digest for consistency.)
+
+# 2) BACKTEST  — mine recent winning patterns (real close-to-close forward returns):
+python3 pattern_mine.py --symbols ../data/watchlist.csv --end <date> --days 80
+#    -> /tmp/patterns.json  (T+1/T+3/T+5 win-rate & avg by setup, and setup×sector)
+
+# 3) SCAN + RENDER  — fold macro + patterns into the report:
+python3 scan.py --symbols ../data/watchlist.csv --date <date> --out ../reports \
+    --title "..." --macro-json /tmp/macro.json --patterns-json /tmp/patterns.json
+```
+
+Both `--macro-json` and `--patterns-json` are optional; omit them for the plain scan.
+The agent should refresh the WebSearch step each run so the macro/news is current.
+
+## Watchlist pool
+
+`data/watchlist.csv` is a maintainable pool (code,name,theme,tier,tags,sources,added,active).
+Add a new research doc with `python3 build_pool.py <doc.html> --src-name X --src-date Y`
+(dedupes by code, unions tags/sources). `scan.py --symbols data/watchlist.csv` uses it.
+
 ## Core logic (don't skip layers)
 
 ```

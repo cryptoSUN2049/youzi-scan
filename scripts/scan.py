@@ -257,6 +257,8 @@ def main():
     ap.add_argument("--title", default="AI Compute Chain")
     ap.add_argument("--limit", type=int, default=None, help="only the first N symbols (fast smoke test)")
     ap.add_argument("--lang", default="zh", choices=["zh", "en"], help="report language (default zh; A-share market)")
+    ap.add_argument("--macro-json", default=None, help="macro/news JSON (from Claude WebSearch step) to embed")
+    ap.add_argument("--patterns-json", default=None, help="backtest patterns JSON from pattern_mine.py")
     a = ap.parse_args()
 
     # adapt non-trading days to the most recent trading day
@@ -282,13 +284,17 @@ def main():
     print(f"coverage: price{stats['price']} pos{stats['cum80']} flow{stats['net5']} vp{stats['turn']} tech{stats['macd']} /{stats['total']}", file=sys.stderr)
     print(f"freshness: price={freshness['price_date']} vp={freshness['vp_date']} flow={freshness['mf_date']} | sentiment asof={sent_asof} fresh={sent_fresh}", file=sys.stderr)
 
+    macro = json.load(open(a.macro_json)) if a.macro_json and os.path.exists(a.macro_json) else None
+    patterns = json.load(open(a.patterns_json)) if a.patterns_json and os.path.exists(a.patterns_json) else None
+    json.dump(rows, open("/tmp/youzi_scored.json", "w"), ensure_ascii=False)
+
     import report
     out_dir = os.path.abspath(a.out)
     os.makedirs(out_dir, exist_ok=True)
     out_file = os.path.join(out_dir, f"{a.title}-youzi-scan-{date}.html")
     report.render(rows, out_file, a.title, date,
                   sentiment=sent_rows, sent_asof=sent_asof, sent_fresh=sent_fresh,
-                  stats=stats, freshness=freshness, lang=a.lang)
+                  stats=stats, freshness=freshness, lang=a.lang, macro=macro, patterns=patterns)
     print(f"OK report: {out_file}", file=sys.stderr)
 
 
