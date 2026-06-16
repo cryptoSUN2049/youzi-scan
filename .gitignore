@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+*.token
+
+# Generated reports & scratch
+reports/
+/tmp/
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
