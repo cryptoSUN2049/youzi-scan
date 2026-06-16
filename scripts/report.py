@@ -188,6 +188,37 @@ def _card(r, T):
 <div class="pk-logic">▶ {reason}{hm}</div></div>'''
 
 
+def _pool_table(rows, tactic, lang):
+    """Tactic pool as a compact comparison TABLE (not cards) — easier to scan side by side."""
+    T = L[lang]
+    zh = lang != "en"
+    rs = sorted([r for r in rows if r["tactic"] == tactic], key=lambda x: -x.get("score", 0))
+    if not rs:
+        return ""
+    cols = (["名称/代码", "评分", "板块", "今涨", "量比", "换手", "主升浪", "距顶", "5日净亿", "吸筹", "量价", "买入逻辑"] if zh
+            else ["Name", "Score", "Sector", "Chg", "VolR", "Turn", "Rally", "vsTop", "5d(e8)", "Streak", "Vol-Price", "Logic"])
+    trs = ""
+    for r in rs:
+        net5 = (r.get('net5') or 0) / 10000
+        reason = T["reason"].get(r.get("reason", ""), r.get("reason", ""))
+        hm = ('｜' + '·'.join(r['hm'])) if r.get('hm') else ''
+        streak = r.get('streak', 0)
+        trs += (f'<tr><td class="nm">{r["name"]}<small>{r["code"]}</small></td>'
+                f'<td class="num"><b>{r.get("score","")}</b></td>'
+                f'<td>{T["theme"].get(r["theme"], r["theme"])}</td>'
+                f'<td class="num {_chgcls(r.get("chg"))}">{_n(r.get("chg"),1)}%</td>'
+                f'<td class="num {_vrcls(r.get("vol_ratio"))}">{_n(r.get("vol_ratio"),2)}</td>'
+                f'<td class="num">{_n(r.get("turn"),1)}</td>'
+                f'<td class="num">+{_n(r.get("cum80"),0)}%</td>'
+                f'<td class="num">{_n(r.get("dtop"),0)}%</td>'
+                f'<td class="num {"up" if net5>=0 else "down"}">{("+" if net5>=0 else "")}{net5:.1f}</td>'
+                f'<td class="c">{("连"+str(streak)) if streak>=3 else (str(streak) if streak else "·")}</td>'
+                f'<td class="vph vph-{_vphcls(r.get("vph","na"))}">{T["vph"].get(r.get("vph","na"),"—")}</td>'
+                f'<td style="white-space:normal;max-width:230px;color:var(--txt2)">{reason}{hm}</td></tr>')
+    th = "".join(f"<th>{c}</th>" for c in cols)
+    return f'<div class="tbl-wrap"><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div>'
+
+
 def _section_cards(rows, key, T):
     rs = sorted([r for r in rows if r["tactic"] == key], key=lambda x: -x.get("score", 0))
     if not rs:
@@ -229,6 +260,38 @@ def _full_row(r, T):
 
 SETUP_EN = {"低吸/回踩MA10": "Dip/MA10 pullback", "打板/涨停": "Limit-up board", "突破新高": "Breakout high",
             "潜伏/低位缩量": "Ambush/low dry-vol", "半路/放量": "Halfway/vol-spike"}
+# Exact definitions mirroring pattern_mine.label_setup (no hand-waving — these ARE the rules).
+SETUP_DEF = {
+    "打板/涨停": "当日涨幅 ≥ 9.5%（涨停）",
+    "突破新高": "收盘创 20 日新高 且 当日涨幅 > 2%",
+    "半路/放量": "当日涨 2~9% 且 量比 ≥ 1.8（放量突破）",
+    "低吸/回踩MA10": "多头排列(MA5>10>20) 且 收盘在 MA10 ±2.5% 且 当日涨幅 ≤ 1%（缩量回踩）",
+    "潜伏/低位缩量": "20日区间位置 ≤ 35%（低位）且 量比 ≤ 0.9（缩量横盘）",
+}
+SETUP_DEF_EN = {
+    "打板/涨停": "day return ≥ 9.5% (limit-up)",
+    "突破新高": "close = 20d high & day return > 2%",
+    "半路/放量": "day +2~9% & vol-ratio ≥ 1.8",
+    "低吸/回踩MA10": "MA bull & close within MA10 ±2.5% & day ≤ 1%",
+    "潜伏/低位缩量": "20d range pos ≤ 35% & vol-ratio ≤ 0.9",
+}
+# East Money (东方财富) concept-flavored Chinese names for our English theme keys.
+CONCEPT_ZH = {
+    "Memory": "存储芯片", "Optical/CPO": "CPO/光模块", "Compute Chips": "算力芯片/国产GPU",
+    "Semi Equipment": "半导体设备", "Semi Materials": "半导体材料", "CCL/Fiberglass/Resin": "覆铜板/PCB上游",
+    "PCB/Substrate": "PCB/IC载板", "MLCC/Passives": "MLCC/被动元件", "Copper Foil/Connect": "铜箔/连接器",
+    "Cooling/Power/Connector": "液冷/电源", "Software/Ecosystem": "AI算力/服务器",
+    "Panel/Glass Substrate": "玻璃基板", "Other Optical/OSAT": "先进封装", "Other": "其他概念",
+}
+HORIZON_COLS = [("t1", "T+1"), ("t3", "T+3"), ("t5", "T+5"), ("t10", "T+10"), ("t20", "T+20·1月"), ("t60", "T+60·3月")]
+
+
+def _hcell(h):
+    """A horizon cell: win% + avg. Null-safe."""
+    if not h:
+        return '<td class="num" style="color:var(--txt3)">—</td>'
+    cls = "up" if h["win"] >= 60 else ("down" if h["win"] < 45 else "")
+    return f'<td class="num"><b class="{cls}">{h["win"]}%</b> <span style="color:var(--txt3)">{h["avg"]:+.0f}</span></td>'
 
 
 def _macro_section(macro, lang):
@@ -284,32 +347,41 @@ def _patterns_section(patterns, lang):
     if not patterns:
         return ""
     zh = lang != "en"
-    LB = {"h": "最佳赚钱模式 · 真实回测" if zh else "Best patterns · real backtest",
-          "d": (f"{patterns.get('n_samples')}样本 / {patterns.get('n_stocks')}只 / {patterns.get('window_days')}天窗口 · close-to-close前向收益" if zh
-                else f"{patterns.get('n_samples')} samples / {patterns.get('n_stocks')} stocks / {patterns.get('window_days')}d"),
-          "setup": "入场模式" if zh else "Setup", "n": "样本" if zh else "n",
-          "note": ("胜率=收正比例,均值=平均收益。越往右(T+5)越偏波段。" if zh else "win=% positive, avg=mean return.")}
     def setlabel(s):
         return s if zh else SETUP_EN.get(s, s)
-    rows = ""
-    for s, st in sorted(patterns.get("by_setup", {}).items(), key=lambda kv: -kv[1]["t3"]["win"]):
-        rows += (f'<tr><td>{setlabel(s)}</td><td class="num">{st["n"]}</td>'
-                 + "".join(f'<td class="num"><b>{st[h]["win"]}%</b> <span style="color:var(--txt3)">{st[h]["avg"]:+.1f}%</span></td>' for h in ("t1", "t3", "t5"))
-                 + "</tr>")
-    combos = sorted(patterns.get("by_combo", {}).items(), key=lambda kv: -kv[1]["t3"]["win"])[:8]
+    def sectorlabel(th):
+        return CONCEPT_ZH.get(th, th) if zh else th
+    h_title = "最佳赚钱模式 · 真实回测" if zh else "Best patterns · real backtest"
+    h_desc = (f"{patterns.get('n_samples')}样本 / {patterns.get('n_stocks')}只 / {patterns.get('window_days')}天窗口 · 信号日收盘买入持有N天" if zh
+              else f"{patterns.get('n_samples')} samples / {patterns.get('n_stocks')} stocks / {patterns.get('window_days')}d")
+    hcols = "".join(f"<th>{lab}</th>" for _, lab in HORIZON_COLS)
+
+    # ① 模式定义
+    DEF = SETUP_DEF if zh else SETUP_DEF_EN
+    defs = "".join(f'<div class="news-row"><span class="news-tag">{setlabel(s)}</span>{d}</div>' for s, d in DEF.items())
+
+    # ② 按模式(多窗口)
+    srows = ""
+    for s, st in sorted(patterns.get("by_setup", {}).items(), key=lambda kv: -((kv[1].get("t3") or {"win": 0})["win"])):
+        srows += f'<tr><td><b>{setlabel(s)}</b></td><td class="num">{st["n"]}</td>' + "".join(_hcell(st.get(hk)) for hk, _ in HORIZON_COLS) + "</tr>"
+
+    # ③ 模式×板块×个股 组合(3-10)
     crows = ""
-    for k, st in combos:
-        kk = k if zh else " @ ".join([SETUP_EN.get(p.strip(), p.strip()) for p in k.split("@")])
-        crows += (f'<tr><td>{kk}</td><td class="num">{st["n"]}</td>'
-                  + "".join(f'<td class="num"><b>{st[h]["win"]}%</b> <span style="color:var(--txt3)">{st[h]["avg"]:+.1f}%</span></td>' for h in ("t1", "t3", "t5"))
-                  + "</tr>")
+    for bc in patterns.get("best_combos", [])[:10]:
+        stocks = "、".join(f'{x["name"]}<span style="color:var(--txt3)">({x["t3_win"]}%)</span>' for x in bc.get("stocks", [])[:4] if x.get("t3_win") is not None)
+        crows += (f'<tr><td><b>{setlabel(bc["setup"])}</b></td><td><span class="news-tag">{sectorlabel(bc["theme"])}</span></td>'
+                  f'<td style="white-space:normal;max-width:280px">{stocks}</td><td class="num">{bc["n"]}</td>'
+                  + "".join(_hcell(bc.get(hk)) for hk, _ in HORIZON_COLS) + "</tr>")
+
+    L1 = (lambda z, e: z if zh else e)
     return f'''<section>
-<div class="sec-h"><span class="n">▲</span><h2>{LB["h"]}</h2><span class="desc">{LB["d"]}</span></div>
-<div class="grid2">
-<div class="tbl-wrap"><table><thead><tr><th>{LB["setup"]}</th><th>{LB["n"]}</th><th>T+1</th><th>T+3</th><th>T+5</th></tr></thead><tbody>{rows}</tbody></table></div>
-<div class="tbl-wrap"><table><thead><tr><th>{("模式×板块 TOP8" if zh else "Setup×Sector TOP8")}</th><th>{LB["n"]}</th><th>T+1</th><th>T+3</th><th>T+5</th></tr></thead><tbody>{crows}</tbody></table></div>
-</div>
-<div class="note" style="margin-top:8px">{LB["note"]}</div></section>'''
+<div class="sec-h"><span class="n">▲</span><h2>{h_title}</h2><span class="desc">{h_desc}</span></div>
+<div class="kbox" style="margin-bottom:10px"><div class="kl">{L1("模式定义(与回测代码一致)","Setup definitions")}</div>{defs}</div>
+<div style="font-size:12px;color:var(--cyan);font-weight:700;margin:10px 0 5px">{L1("① 按入场模式 · 各持有窗口胜率/均值","① By setup · win/avg per horizon")}</div>
+<div class="tbl-wrap"><table><thead><tr><th>{L1("入场模式","Setup")}</th><th>{L1("样本","n")}</th>{hcols}</tr></thead><tbody>{srows}</tbody></table></div>
+<div style="font-size:12px;color:var(--cyan);font-weight:700;margin:14px 0 5px">{L1("② 最佳「模式 × 板块 × 个股」组合(按T+3胜率)","② Best setup × sector × stock")}</div>
+<div class="tbl-wrap"><table><thead><tr><th>{L1("模式","Setup")}</th><th>{L1("板块(东财概念)","Sector")}</th><th>{L1("代表个股(括号=该票T+3胜率)","Stocks (T+3 win)")}</th><th>{L1("样本","n")}</th>{hcols}</tr></thead><tbody>{crows}</tbody></table></div>
+<div class="note" style="margin-top:8px">{L1("胜率=该模式样本中收正比例,均值=平均收益%;红≥60%、绿&lt;45%。T+60(3月)样本较少(需足够前向交易日),仅供趋势参考。","win=% positive, avg=mean %.")}</div></section>'''
 
 
 def _top10_section(rows, lang):
@@ -382,7 +454,7 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
     failed = stats.get("failed", [])
     fail_txt = T["miss"].format(len(failed), ', '.join(failed[:8]) + ('…' if len(failed) > 8 else '')) if failed else ""
 
-    pools = {t: _section_cards(rows, t, T) for t in ["ambush", "dip", "halfway", "chase"]}
+    pools = {t: _pool_table(rows, t, lang) for t in ["ambush", "dip", "halfway", "chase"]}
     tc = T["tc"]
     sec00 = _exec_summary(conclusion, lang)                          # 00 结论先行(agent撰写)
     sec_macro = _macro_section(macro, lang)                          # 01 全球 / 02 外盘 / 03 大盘
