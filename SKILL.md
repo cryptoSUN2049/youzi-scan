@@ -57,8 +57,13 @@ python3 pattern_mine.py --symbols ../data/watchlist.csv --end <date> --days 200
 #                   "ashare":{idx,northbound,read},"sector_flow":[{name,pct,net}],"sector_read","read"}
 
 # STEP 4 · SCAN (deterministic) — 4-D score the pool, save render context
-python3 scan.py --symbols ../data/watchlist.csv --date <date> --out ../reports --title "..." \
-    --macro-json /tmp/macro.json --patterns-json /tmp/patterns.json
+#   OMIT --date and it AUTO-PICKS the anchor + run-mode from Beijing time (helpers.anchor_date_and_mode):
+#     >=15:00 盘后复盘=today · <09:30 盘前=prev trading day · 09:30-15:00 盘中=today. No hard-coded date.
+python3 scan.py --symbols ../data/watchlist.csv --out ../reports --title "..." \
+    --macro-json /tmp/macro.json --patterns-json /tmp/patterns.json   # [--date YYYY-MM-DD to override]
+
+# STEP 4b · PULLBACK AMBUSH (deterministic) — strong names rarely pull back to MA10; project the dip price
+python3 pullback.py <date>     # reads /tmp/youzi_scored.json -> /tmp/pullback.json (MA5/MA10 dip-buy targets)
 #   -> /tmp/youzi_scored.json (rows) + /tmp/youzi_ctx.json (full render context)
 #   The report it writes here has a PLACEHOLDER conclusion — that's expected; step 6 injects the real one.
 
