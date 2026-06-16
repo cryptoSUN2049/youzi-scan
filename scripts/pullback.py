@@ -35,27 +35,48 @@ for i, r in enumerate(cands_in):
         continue
     hist = sorted(hist, key=lambda x: x["date"])
     c = [x["close"] for x in hist]
+    lo = [x.get("low", x["close"]) for x in hist]
     cur = c[-1]
     ma5 = sum(c[-5:]) / 5
     ma10 = sum(c[-10:]) / 10
     ma20 = sum(c[-20:]) / 20 if len(c) >= 20 else ma10
     if not (ma5 > ma10 > ma20):   # confirm a real multi-head uptrend
         continue
+    to_ma5 = (ma5 / cur - 1) * 100
+    to_ma10 = (ma10 / cur - 1) * 100
+    # PANIC SCENARIO — recent strong stocks often gap/dip -5%~-8% intraday then recover; that panic = the buy.
+    panic5, panic8 = round(cur * 0.95, 2), round(cur * 0.92, 2)   # price if tomorrow drops -5% / -8%
+    # does a -5% / -8% panic land at a moving-average support? (best dip = panic INTO support)
+    if to_ma5 >= -5:
+        verdict = "✅ -5%内即触MA5(优质)"   # shallow panic reaches MA5 support
+    elif to_ma5 >= -8:
+        verdict = "🟡 -5~8%恐慌触MA5"
+    elif to_ma10 >= -8:
+        verdict = "🟡 -8%恐慌触MA10"
+    else:
+        verdict = "⚠️ 太强,-8%仍在MA5上方"
+    # VALIDATE with history: count recent days that dipped >=4% intraday then recovered (the pattern itself)
+    pr = 0
+    for k in range(1, len(c)):
+        if c[k - 1] and (lo[k] / c[k - 1] - 1) <= -0.04 and (c[k] / lo[k] - 1) >= 0.02:
+            pr += 1
     out.append({
         "code": r["code"], "name": r["name"], "theme": r["theme"], "price": round(cur, 2),
-        "ma5": round(ma5, 2), "ma10": round(ma10, 2),
-        "to_ma5": round((ma5 / cur - 1) * 100, 1),   # negative = % drop needed to reach MA5
-        "to_ma10": round((ma10 / cur - 1) * 100, 1),
+        "ma5": round(ma5, 2), "ma10": round(ma10, 2), "to_ma5": round(to_ma5, 1), "to_ma10": round(to_ma10, 1),
+        "panic5": panic5, "panic8": panic8, "verdict": verdict, "panic_recover": pr,
         "cum80": r.get("cum80"), "dtop": r.get("dtop"), "net5": r.get("net5"),
         "score": r.get("score"), "turn": r.get("turn"), "vol_ratio": r.get("vol_ratio"),
     })
     if i % 15 == 0:
         print(f"  {i}/{len(cands_in)}", file=sys.stderr)
 
-# rank: strongest first (rally still has money & isn't extended) — by score, then nearest to MA5
-out.sort(key=lambda x: (-(x["score"] or 0), x["to_ma5"]))
+# rank: prefer where a shallow panic reaches support (to_ma5 in -8..-2) + strong + has recovered before
+def _rk(x):
+    near = 0 if -8 <= x["to_ma5"] <= -2 else (1 if x["to_ma5"] > -2 else 2)
+    return (near, -(x["score"] or 0), -x["panic_recover"])
+out.sort(key=_rk)
 json.dump({"date": end, "candidates": out}, open("/tmp/pullback.json", "w"), ensure_ascii=False, indent=1)
 print(f"潜在低吸候选 {len(out)} 只", file=sys.stderr)
 for x in out[:10]:
-    print(f"  {x['name']} 现{x['price']} 回踩MA5 {x['to_ma5']}%(到{x['ma5']}) / MA10 {x['to_ma10']}%(到{x['ma10']}) "
-          f"评分{x['score']} 5日净{(x['net5'] or 0)/10000:+.1f}亿", file=sys.stderr)
+    print(f"  {x['name']} 现{x['price']} | -5%→{x['panic5']} -8%→{x['panic8']} | MA5={x['ma5']}({x['to_ma5']}%) | "
+          f"{x['verdict']} | 近期恐慌拉回{x['panic_recover']}次 净{(x['net5'] or 0)/10000:+.1f}亿", file=sys.stderr)
