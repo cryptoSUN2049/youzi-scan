@@ -232,24 +232,52 @@ SETUP_EN = {"低吸/回踩MA10": "Dip/MA10 pullback", "打板/涨停": "Limit-up
 
 
 def _macro_section(macro, lang):
+    """Renders the top-down funnel layers 01 global / 02 overseas / 03 A-share / 05 capital."""
     if not macro:
         return ""
     zh = lang != "en"
-    LB = {"h": "大盘 · 外盘 · 全球新闻" if zh else "Markets & global news",
-          "d": "宏观背景(行情数据 datahub · 新闻搜索)" if zh else "macro backdrop",
-          "a": "A股大盘" if zh else "A-share indices", "g": "外盘" if zh else "Global",
-          "n": "重大新闻" if zh else "Key news", "r": "解读" if zh else "Read", "w": "权重" if zh else "wt"}
-    idx = "".join(f'<span class="chip"><b>{i["name"]}</b> {i["close"]} <span class="{ "up" if (i["pct"] or 0)>0 else "down"}">{i["pct"]:+}%</span></span>' for i in macro.get("indices", []))
-    glob = "".join(f'<span class="chip"><b>{g["name"]}</b> {g["val"]} <span style="color:var(--txt3)">{g["note"]}</span></span>' for g in macro.get("global", []))
-    news = "".join(f'<div class="news-row"><span class="news-tag">{n["tag"]}</span>{n["t"]}</div>' for n in macro.get("news", []))
-    read = macro.get("read", "")
-    return f'''<section>
-<div class="sec-h"><span class="n">◎</span><h2>{LB["h"]}</h2><span class="desc">{LB["d"]}</span></div>
-<div class="mac-row"><span class="mac-l">{LB["a"]}</span>{idx}</div>
-<div class="mac-row"><span class="mac-l">{LB["g"]}</span>{glob}</div>
-<div class="kbox" style="margin-top:10px"><div class="kl">{LB["n"]}</div>{news}</div>
-<div class="kbox gold" style="margin-top:10px"><div class="kl">{LB["r"]}</div><div style="font-size:12px;color:var(--txt2)">{read}</div></div>
-</section>'''
+    def L1(z, e):
+        return z if zh else e
+    out = ""
+    # 01 全球宏观与重大事件
+    gn = macro.get("global_news", [])
+    if gn:
+        news = "".join(f'<div class="news-row"><span class="news-tag">{n["tag"]}</span>{n["t"]}</div>' for n in gn)
+        out += f'''<section><div class="sec-h"><span class="n">01</span><h2>{L1("全球宏观与重大事件","Global macro & events")}</h2><span class="desc">{L1("最广镜头:决定全球风险偏好","widest lens · risk appetite")}</span></div>
+<div class="kbox red">{news}</div></section>'''
+    # 02 外盘·美股AI科技
+    ov = macro.get("overseas")
+    if ov:
+        idx = "".join(f'<span class="chip"><b>{g["name"]}</b> {g["val"]} <span style="color:var(--txt3)">{g["note"]}</span></span>' for g in ov.get("idx", []))
+        out += f'''<section><div class="sec-h"><span class="n">02</span><h2>{L1("外盘 · 美股AI科技传导","Overseas · US AI/tech")}</h2><span class="desc">{L1("隔夜美股=我们开盘的情绪底色","overnight US sets the tone")}</span></div>
+<div class="mac-row">{idx}</div>
+<div class="kbox" style="margin-top:8px"><div class="kl">{L1("AI/半导体动向","AI/semis")}</div><div style="font-size:12px;color:var(--txt2)">{ov.get("ai","")}</div></div>
+<div class="note" style="margin-top:8px"><b>{L1("解读","Read")}:</b> {ov.get("read","")}</div></section>'''
+    # 03 A股大盘复盘
+    asx = macro.get("ashare")
+    if asx:
+        idx = "".join(f'<span class="chip"><b>{i["name"]}</b> {i["close"]} <span class="{"up" if (i["pct"] or 0)>0 else "down"}">{i["pct"]:+}%</span></span>' for i in asx.get("idx", []))
+        nb = asx.get("northbound", "")
+        out += f'''<section><div class="sec-h"><span class="n">03</span><h2>{L1("A股大盘复盘","A-share index review")}</h2><span class="desc">{L1("回到主场:指数/北向/风格","home market · style")}</span></div>
+<div class="mac-row">{idx}</div>
+{f'<div class="note" style="margin-top:8px"><b>{L1("北向","Northbound")}:</b> {nb}</div>' if nb else ''}
+<div class="kbox gold" style="margin-top:8px"><div class="kl">{L1("解读","Read")}</div><div style="font-size:12px;color:var(--txt2)">{asx.get("read","")}</div></div></section>'''
+    return out
+
+
+def _capital_section(macro, lang):
+    """Funnel layer 05: capital flows (sector money-flow rotation)."""
+    if not macro or not macro.get("sector_flow"):
+        return ""
+    zh = lang != "en"
+    sf = macro["sector_flow"]
+    chips = "".join(f'<span class="chip"><b>{s["name"]}</b> <span class="{"up" if (s["pct"] or 0)>0 else "down"}">{s["pct"]:+}%</span> <span style="color:var(--gold)">净{s["net"]}亿</span></span>' for s in sf)
+    read = macro.get("sector_read", "")
+    h = "资金面 · 板块主力流向" if zh else "Capital · sector money flow"
+    d = "钱往哪轮动 = 主攻方向" if zh else "where money rotates"
+    return f'''<section><div class="sec-h"><span class="n">05</span><h2>{h}</h2><span class="desc">{d}</span></div>
+<div class="mac-row" style="margin-bottom:8px">{chips}</div>
+<div class="warn-box">{read}</div></section>'''
 
 
 def _patterns_section(patterns, lang):
@@ -298,39 +326,26 @@ def _top10_section(rows, lang):
 <div class="picks">{cards}</div></section>'''
 
 
-def _exec_summary(rows, sentiment, macro, patterns, lang):
-    zh = lang != "en"
-    T = L[lang]
-    v_head, _ = sentiment_verdict(sentiment, T)
-    # best pattern
-    best = ""
-    if patterns and patterns.get("by_setup"):
-        bs = max(patterns["by_setup"].items(), key=lambda kv: kv[1]["t3"]["win"])
-        nm = bs[0] if zh else SETUP_EN.get(bs[0], bs[0])
-        best = (f"{nm} T+3胜率{bs[1]['t3']['win']}%/均值{bs[1]['t3']['avg']:+.1f}%、T+5 {bs[1]['t5']['win']}%/{bs[1]['t5']['avg']:+.1f}%" if zh
-                else f"{nm}: T+3 win {bs[1]['t3']['win']}%/{bs[1]['t3']['avg']:+.1f}%, T+5 {bs[1]['t5']['win']}%/{bs[1]['t5']['avg']:+.1f}%")
-    rank = {"ambush": 0, "dip": 1}
-    picks = [r for r in sorted(rows, key=lambda r: (rank.get(r["tactic"], 9), -r.get("score", 0))) if r["tactic"] in ("ambush", "dip")][:5]
-    pick_s = "、".join(f"{r['name']}({r['code'][:6]})" for r in picks)
-    cnt = Counter(r["tactic"] for r in rows)
-    if zh:
-        body = (f"<b>① 周期</b>:{v_head}。<b>② 宏观</b>:{(macro or {}).get('read','')[:90]}…<br>"
-                f"<b>③ 最佳模式(回测)</b>:{best}——<b>低吸>追涨、T+3/T+5>T+1</b>。<br>"
-                f"<b>④ 操作</b>:T+3条件下,优先在 <b>CCL/PCB/材料</b> 做<b>缩量回踩MA10低吸</b>;潜伏池({cnt.get('ambush',0)}只)埋伏等催化。<br>"
-                f"<b>⑤ 重点票</b>:{pick_s}。")
-        head = "结论先行 · 一句话操作纲领"
+def _exec_summary(conclusion, lang):
+    """Section 00. The conclusion is written by the AGENT from the real data (not a template).
+    `conclusion` is an HTML/markdown-ish string. Empty -> a neutral placeholder (never fabricate)."""
+    head = "结论先行 · 操作纲领" if lang != "en" else "Executive summary"
+    if not conclusion or not conclusion.strip():
+        ph = ("(待 agent 基于本报告的真实数据撰写结论——脚本不臆造)" if lang != "en"
+              else "(to be written by the agent from the data below — the script does not fabricate)")
+        body = f'<div style="color:var(--txt3);font-style:italic">{ph}</div>'
     else:
-        body = (f"<b>① Cycle</b>: {v_head}. <b>② Best pattern</b>: {best} — dip>chase, T+3/T+5>T+1. "
-                f"<b>③ Play</b>: under T+3, dip-buy MA10 pullbacks in CCL/PCB/Materials. <b>Picks</b>: {pick_s}.")
-        head = "Executive summary"
+        # allow simple line breaks; the agent supplies the analytical narrative
+        body = conclusion.replace("\n\n", "</p><p>").replace("\n", "<br>")
+        body = f'<div style="font-size:12.5px;color:var(--txt);line-height:1.75"><p>{body}</p></div>'
     return f'''<section>
 <div class="sec-h"><span class="n">00</span><h2>{head}</h2></div>
-<div class="kbox red" style="border-left-width:4px"><div style="font-size:12.5px;color:var(--txt);line-height:1.7">{body}</div></div></section>'''
+<div class="kbox red" style="border-left-width:4px">{body}</div></section>'''
 
 
 def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
            sentiment=None, sent_asof=None, sent_fresh=False, stats=None, freshness=None, lang="zh",
-           macro=None, patterns=None):
+           macro=None, patterns=None, conclusion=None):
     T = L.get(lang, L["zh"])
     sentiment = sentiment or []
     stats = stats or {}
@@ -369,10 +384,11 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
 
     pools = {t: _section_cards(rows, t, T) for t in ["ambush", "dip", "halfway", "chase"]}
     tc = T["tc"]
-    intel = (_exec_summary(rows, sentiment, macro, patterns, lang)
-             + _macro_section(macro, lang)
-             + _patterns_section(patterns, lang)
-             + _top10_section(rows, lang))
+    sec00 = _exec_summary(conclusion, lang)                          # 00 结论先行(agent撰写)
+    sec_macro = _macro_section(macro, lang)                          # 01 全球 / 02 外盘 / 03 大盘
+    sec_capital = _capital_section(macro, lang)                      # 05 资金面
+    sec_patterns = _patterns_section(patterns, lang)                 # 06 回测
+    sec_top10 = _top10_section(rows, lang)                           # 08 TOP10
 
     html = f'''<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -472,9 +488,9 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 <span class="tac-pill" style="background:#161d28;color:var(--txt3)">{T["tactic"]["watch"]} {cc('watch')}</span>
 </div></header>
 <div class="wrap">
-{intel}
+{sec00}{sec_macro}
 <section>
-<div class="sec-h"><span class="n">01</span><h2>{T["s01"]}</h2><span class="desc">{T["s01d"]} · {fresh_badge}</span></div>
+<div class="sec-h"><span class="n">04</span><h2>{T["s01"]}</h2><span class="desc">{T["s01d"]} · {fresh_badge}</span></div>
 <div class="tbl-wrap" style="margin-bottom:12px"><table>
 <thead><tr><th>{tc[0] if False else T["th_date"]}</th><th>{T["th_up"]}</th><th>{T["th_z"]}</th><th>{T["th_seal"]}</th><th>{T["th_mb"]}</th><th>{T["th_b2"]}</th></tr></thead>
 <tbody>{sent_rows}</tbody></table></div>
@@ -485,8 +501,10 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 <div style="font-size:11px;color:var(--txt2)">{T["for_body"]}</div></div>
 </div></section>
 
+{sec_capital}
+{sec_patterns}
 <section>
-<div class="sec-h"><span class="n">02</span><h2>{T["s02"]}</h2></div>
+<div class="sec-h"><span class="n">▦</span><h2>{T["s02"]}</h2></div>
 <div class="ind-grid">
 <div class="ind-c"><h4>{T["i1t"]}</h4><p>{T["i1"]}</p></div>
 <div class="ind-c"><h4>{T["i2t"]}</h4><p>{T["i2"]}</p></div>
@@ -514,8 +532,9 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 {pools["chase"] or f'<div class="note">{T["e06"]}</div>'}
 </section>
 
+{sec_top10}
 <section>
-<div class="sec-h"><span class="n">07</span><h2>{T["s07"].format(len(rows))}</h2><span class="desc">{T["s07d"]}</span></div>
+<div class="sec-h"><span class="n">09</span><h2>{T["s07"].format(len(rows))}</h2><span class="desc">{T["s07d"]}</span></div>
 <div class="tbl-wrap"><table>
 <thead><tr>{''.join(f'<th>{c}</th>' for c in tc)}</tr></thead>
 <tbody>{by_theme}</tbody></table></div>

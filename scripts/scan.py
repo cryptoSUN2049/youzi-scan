@@ -259,6 +259,7 @@ def main():
     ap.add_argument("--lang", default="zh", choices=["zh", "en"], help="report language (default zh; A-share market)")
     ap.add_argument("--macro-json", default=None, help="macro/news JSON (from Claude WebSearch step) to embed")
     ap.add_argument("--patterns-json", default=None, help="backtest patterns JSON from pattern_mine.py")
+    ap.add_argument("--conclusion-file", default=None, help="agent-written conclusion (HTML/text) for section 00")
     a = ap.parse_args()
 
     # adapt non-trading days to the most recent trading day
@@ -286,6 +287,13 @@ def main():
 
     macro = json.load(open(a.macro_json)) if a.macro_json and os.path.exists(a.macro_json) else None
     patterns = json.load(open(a.patterns_json)) if a.patterns_json and os.path.exists(a.patterns_json) else None
+    conclusion = open(a.conclusion_file).read() if a.conclusion_file and os.path.exists(a.conclusion_file) else None
+    # Save the full render context so the agent can write a conclusion from the real data and re-render
+    # WITHOUT re-pulling (deterministic data from the script; analysis from the agent).
+    ctx = {"rows": rows, "title": a.title, "date": date, "lang": a.lang,
+           "sentiment": sent_rows, "sent_asof": sent_asof, "sent_fresh": sent_fresh,
+           "stats": stats, "freshness": freshness}
+    json.dump(ctx, open("/tmp/youzi_ctx.json", "w"), ensure_ascii=False)
     json.dump(rows, open("/tmp/youzi_scored.json", "w"), ensure_ascii=False)
 
     import report
@@ -294,7 +302,8 @@ def main():
     out_file = os.path.join(out_dir, f"{a.title}-youzi-scan-{date}.html")
     report.render(rows, out_file, a.title, date,
                   sentiment=sent_rows, sent_asof=sent_asof, sent_fresh=sent_fresh,
-                  stats=stats, freshness=freshness, lang=a.lang, macro=macro, patterns=patterns)
+                  stats=stats, freshness=freshness, lang=a.lang, macro=macro, patterns=patterns,
+                  conclusion=conclusion)
     print(f"OK report: {out_file}", file=sys.stderr)
 
 
