@@ -172,20 +172,22 @@ def pull_dragon(date):
 
 
 # ---------------- 3. volume-price health + tactic decision tree ----------------
+# NB: classify/vol_price_health return STABLE KEYS (not display text). report.py maps
+# keys -> localized labels, so the same logic drives both zh and en output.
 def vol_price_health(chg, vr):
     if chg is None or vr is None:
-        return "-"
+        return "na"
     if chg > 1 and vr > 1.5:
-        return "Rise+Vol(attack)"
+        return "rise_vol"          # rise on volume (attack)
     if chg > 1 and vr < 0.8:
-        return "Rise+LowVol(divergence)"
+        return "rise_lowvol"       # rise on shrinking volume (divergence)
     if chg < -1 and vr < 0.8:
-        return "Pullback+LowVol(healthy)"
+        return "pullback_lowvol"   # pullback on low volume (healthy)
     if chg < -1 and vr > 1.5:
-        return "Drop+Vol(distribution)"
+        return "drop_vol"          # drop on volume (distribution)
     if abs(chg) <= 1 and vr < 0.9:
-        return "Flat+LowVol(coiling)"
-    return "Neutral"
+        return "flat_lowvol"       # flat low volume (coiling)
+    return "neutral"
 
 
 def classify(r):
@@ -202,41 +204,48 @@ def classify(r):
     hot_turn = (turn is not None and turn > 20)
     fund_in = (net5 is not None and net5 > 0 and streak >= 2)
     macd_up = (macd is not None and macd > 0) or difdea > 0
+    # Hot-money float preference: small floats move fast, elephants are hard to push.
+    fmv = r.get("float_mv")  # circulating market cap in 100M CNY (亿元)
+    small_float = (fmv is not None and fmv < 150)
+    huge_float = (fmv is not None and fmv > 800)
     # score 0-100
     score = 0
     score += 30 if fund_in else (15 if (net5 or 0) > 0 else 0)
     score += 22 if low else (12 if not high else 0)
     vph = vol_price_health(chg, vr)
-    score += 20 if ("attack" in vph or "coiling" in vph or "healthy" in vph) else (2 if "divergence" in vph or "distribution" in vph else 10)
+    good_vph = vph in ("rise_vol", "flat_lowvol", "pullback_lowvol")
+    bad_vph = vph in ("rise_lowvol", "drop_vol")
+    score += 18 if good_vph else (2 if bad_vph else 9)
     if bull:
-        score += 12
+        score += 11
     if macd_up:
-        score += 8
+        score += 7
     if hm:
-        score += 8
-    score = min(100, score)
-    # tactic (priority order)
+        score += 7
+    score += 4 if small_float else (-4 if huge_float else 0)  # float-size nudge
+    score = max(0, min(100, score))
+    # tactic (priority order) — returns STABLE KEYS, localized by report.py
     if high and (huge or hot_turn):
-        return "⛔ Avoid", score, "High + huge turnover (distribution risk)", vph
+        return "avoid", score, "avoid_huge_turn", vph
     if cu > 150:
-        return "⛔ Avoid", score, "Parabolic end (>150% rally, overextended)", vph
+        return "avoid", score, "avoid_parabolic", vph
     if high and c < 2:
-        return "⛔ Avoid", score, "High + stalling (relay capital fading)", vph
+        return "avoid", score, "avoid_high_stall", vph
     if c >= 9.7:
         if not high and not hot_turn:
-            return "🔴 Limit-chase", score, "Limit-up + not high + turnover not overheated" + (" + hot-money" if hm else ""), vph
-        return "⛔ Avoid", score, "High limit-up (chasing risk)", vph
+            return "chase", score, ("chase_ok_hm" if hm else "chase_ok"), vph
+        return "avoid", score, "avoid_high_limit", vph
     if big and turn and 3 <= turn <= 15 and 2 <= c <= 7 and (attack is None or attack > 0) and not high:
-        return "🟡 Halfway", score, "Volume breakout + active turnover + strong attack", vph
+        return "halfway", score, "halfway", vph
     if bull and quiet and am10 is not None and -3.5 <= am10 <= 3 and macd_up and not high:
-        return "🔵 Dip", score, "Uptrend pullback to MA10 on low vol + MACD above water", vph
+        return "dip", score, "dip", vph
     if low and (quiet or (vr is not None and vr < 1.3)) and fund_in:
-        return "🟢 Ambush", score, "Low position + shrinking vol + sustained institutional accumulation", vph
+        return "ambush", score, ("ambush_quiet_small" if small_float else "ambush_quiet"), vph
     if low and fund_in:
-        return "🟢 Ambush", score, "Low position + net institutional inflow", vph
+        return "ambush", score, "ambush_inflow", vph
     if high:
-        return "⚠️ High", score, "High position relay (don't chase)", vph
-    return "△ Watch", score, "Volume/capital signals unclear", vph
+        return "high", score, "high_relay", vph
+    return "watch", score, "watch", vph
 
 
 # ---------------- 4. main ----------------
@@ -247,6 +256,7 @@ def main():
     ap.add_argument("--out", default="./reports")
     ap.add_argument("--title", default="AI Compute Chain")
     ap.add_argument("--limit", type=int, default=None, help="only the first N symbols (fast smoke test)")
+    ap.add_argument("--lang", default="zh", choices=["zh", "en"], help="report language (default zh; A-share market)")
     a = ap.parse_args()
 
     # adapt non-trading days to the most recent trading day
@@ -278,7 +288,7 @@ def main():
     out_file = os.path.join(out_dir, f"{a.title}-youzi-scan-{date}.html")
     report.render(rows, out_file, a.title, date,
                   sentiment=sent_rows, sent_asof=sent_asof, sent_fresh=sent_fresh,
-                  stats=stats, freshness=freshness)
+                  stats=stats, freshness=freshness, lang=a.lang)
     print(f"OK report: {out_file}", file=sys.stderr)
 
 
