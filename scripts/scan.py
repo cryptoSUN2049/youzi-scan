@@ -252,7 +252,7 @@ def classify(r):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbols", default=os.path.join(os.path.dirname(__file__), "symbols_ai_compute.csv"))
-    ap.add_argument("--date", default="2026-06-16")
+    ap.add_argument("--date", default=None, help="anchor trading day; auto-detected from Beijing time if omitted")
     ap.add_argument("--out", default="./reports")
     ap.add_argument("--title", default="AI Compute Chain")
     ap.add_argument("--limit", type=int, default=None, help="only the first N symbols (fast smoke test)")
@@ -262,16 +262,22 @@ def main():
     ap.add_argument("--conclusion-file", default=None, help="agent-written conclusion (HTML/text) for section 00")
     a = ap.parse_args()
 
-    # adapt non-trading days to the most recent trading day
-    date = h.resolve_trading_day(a.date)
-    if date != a.date:
-        print(f"NB: {a.date} is not a trading day; using {date}", file=sys.stderr)
+    # date: explicit --date, else auto-pick anchor + run-mode from Beijing time
+    if a.date:
+        date = h.resolve_trading_day(a.date)
+        mode = ""
+        if date != a.date:
+            print(f"NB: {a.date} is not a trading day; using {date}", file=sys.stderr)
+    else:
+        date, mode = h.anchor_date_and_mode()
+        print(f"auto date: anchor {date} ({mode})", file=sys.stderr)
     win = h.windows(date)  # dynamic pull windows
 
     symbols = [(r["code"], r.get("name", ""), r.get("theme", "Other")) for r in csv.DictReader(open(a.symbols))]
     print(f"{len(symbols)} symbols | anchor {date} | windows {win}", file=sys.stderr)
 
     rows, stats, freshness = pull_all(symbols, date, win, limit=a.limit)
+    freshness["mode"] = mode
     dtmap = pull_dragon(date)
     for r in rows:
         r["hm"] = list(dict.fromkeys(dtmap.get(r["code"], {}).get("hm", [])))

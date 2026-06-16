@@ -39,6 +39,29 @@ def resolve_trading_day(date):
     return opens[-1] if opens else date
 
 
+def anchor_date_and_mode(now=None):
+    """Auto-pick the anchor trading day + run-mode from Beijing time — so 'run tonight' vs 'run
+    tomorrow pre-open' resolve correctly without a hard-coded date.
+      - >= 15:00 CST (after close)  -> mode 盘后复盘, anchor = today's session (resolve to trading day)
+      - <  09:30 CST (pre-open)     -> mode 盘前,     anchor = the PREVIOUS trading day (last close)
+      - 09:30–15:00 CST (intraday)  -> mode 盘中,     anchor = today (data still incomplete)
+    Returns (anchor_date 'YYYY-MM-DD', mode).
+    """
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))  # Beijing = UTC+8
+    today = now.date().isoformat()
+    minutes = now.hour * 60 + now.minute
+    if minutes >= 15 * 60:          # after close
+        return resolve_trading_day(today), "盘后复盘"
+    if minutes < 9 * 60 + 30:       # before open -> previous trading day
+        cal = trade_calendar(today, today)
+        prev = cal[0].get("pretrade_date") if cal else None
+        if not prev:
+            prev = resolve_trading_day((_d(today) - datetime.timedelta(days=1)).isoformat())
+        return prev, "盘前"
+    return resolve_trading_day(today), "盘中"
+
+
 def prev_trading_days(date, n):
     """The most recent n trading days <= date, ascending.
     NB: trade_calendar returns descending order, so we sort before slicing."""

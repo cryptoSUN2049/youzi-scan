@@ -22,12 +22,14 @@ def main():
     ap.add_argument("--conclusion-file", default=None)
     ap.add_argument("--macro-json", default="/tmp/macro.json")
     ap.add_argument("--patterns-json", default="/tmp/patterns.json")
+    ap.add_argument("--pullback-json", default="/tmp/pullback.json")
     ap.add_argument("--out", default="./reports")
     a = ap.parse_args()
 
     ctx = json.load(open(a.ctx))
     macro = json.load(open(a.macro_json)) if os.path.exists(a.macro_json) else None
     patterns = json.load(open(a.patterns_json)) if os.path.exists(a.patterns_json) else None
+    pullback = json.load(open(a.pullback_json)) if os.path.exists(a.pullback_json) else None
     conclusion = open(a.conclusion_file).read() if a.conclusion_file and os.path.exists(a.conclusion_file) else None
 
     out_dir = os.path.abspath(a.out)
@@ -37,7 +39,7 @@ def main():
                   sentiment=ctx.get("sentiment"), sent_asof=ctx.get("sent_asof"),
                   sent_fresh=ctx.get("sent_fresh", False), stats=ctx.get("stats"),
                   freshness=ctx.get("freshness"), lang=ctx.get("lang", "zh"),
-                  macro=macro, patterns=patterns, conclusion=conclusion)
+                  macro=macro, patterns=patterns, conclusion=conclusion, pullback=pullback)
     print("OK report:", out_file, file=sys.stderr)
 
 

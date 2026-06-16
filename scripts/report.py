@@ -384,6 +384,37 @@ def _patterns_section(patterns, lang):
 <div class="note" style="margin-top:8px">{L1("胜率=该模式样本中收正比例,均值=平均收益%;红≥60%、绿&lt;45%。T+60(3月)样本较少(需足够前向交易日),仅供趋势参考。","win=% positive, avg=mean %.")}</div></section>'''
 
 
+def _pullback_section(pullback, lang):
+    """潜在低吸埋伏: strong uptrend names not yet pulled back -> their MA5/MA10 dip-buy target prices.
+    Answers 'these strong stocks rarely touch MA10 — if they gap down to X tomorrow, that's the low-buy'."""
+    if not pullback or not pullback.get("candidates"):
+        return ""
+    zh = lang != "en"
+    L1 = (lambda z, e: z if zh else e)
+    cands = pullback["candidates"][:15]
+    trs = ""
+    for r in cands:
+        net5 = (r.get("net5") or 0) / 10000
+        # suggested dip zone: shallow pullback (MA5) for very strong; deeper (MA10) otherwise
+        zone = f'MA5 {r["ma5"]}' if abs(r.get("to_ma5", 0)) <= 6 else f'MA5~MA10 {r["ma5"]}~{r["ma10"]}'
+        trs += (f'<tr><td class="nm">{r["name"]}<small>{r["code"]}</small></td>'
+                f'<td class="num">{r["price"]}</td>'
+                f'<td>{CONCEPT_ZH.get(r["theme"], r["theme"]) if zh else r["theme"]}</td>'
+                f'<td class="num">+{_n(r.get("cum80"),0)}%</td>'
+                f'<td class="num"><b class="down">{r["to_ma5"]}%</b><br><span style="color:var(--txt3)">{r["ma5"]}</span></td>'
+                f'<td class="num"><b class="down">{r["to_ma10"]}%</b><br><span style="color:var(--txt3)">{r["ma10"]}</span></td>'
+                f'<td class="num {"up" if net5>=0 else "down"}">{("+" if net5>=0 else "")}{net5:.1f}</td>'
+                f'<td class="num"><b>{r.get("score","")}</b></td>'
+                f'<td style="color:var(--g-buy);font-weight:600">{zone}</td></tr>')
+    cols = [L1("强势股","Stock"), L1("现价","Px"), L1("板块(东财)","Sector"), L1("主升浪","Rally"),
+            L1("回踩MA5(目标价)","to MA5"), L1("回踩MA10(目标价)","to MA10"), L1("5日净亿","5d"), L1("评分","Score"), L1("建议低吸位","Buy zone")]
+    th = "".join(f"<th>{c}</th>" for c in cols)
+    return f'''<section>
+<div class="sec-h"><span class="n">◈</span><h2>{L1("潜在低吸埋伏 · 回踩目标价","Pullback ambush · dip targets")}</h2><span class="desc">{L1("强势股很少踩MA10→推演:跌到哪是低吸点","project the dip-buy price")}</span></div>
+<div class="note" style="margin-bottom:8px">{L1("逻辑:最近强势股很少回踩MA10(甚至MA5都少破),静态「低吸池」常为空。这里反向推演——对<b>多头排列、当前在MA10上方、资金仍在</b>的强势股,算出它<b>回踩MA5/MA10的目标价</b>:<b>如果明天低开/回踩到「建议低吸位」就是好的低吸点</b>,挂单或盯盘埋伏。负数=需要下跌的幅度。","If a strong name gaps down to its MA5/MA10, that's the dip-buy. Negative = drop needed.")}</div>
+<div class="tbl-wrap"><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div></section>'''
+
+
 def _next_batch_section(rows, patterns, lang):
     """CLOSE THE LOOP: which stocks are TODAY firing a historically high-win pattern = next batch.
     Join each actionable stock's CURRENT setup × its sector against the backtest win rates."""
@@ -472,7 +503,7 @@ def _exec_summary(conclusion, lang):
 
 def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
            sentiment=None, sent_asof=None, sent_fresh=False, stats=None, freshness=None, lang="zh",
-           macro=None, patterns=None, conclusion=None):
+           macro=None, patterns=None, conclusion=None, pullback=None):
     T = L.get(lang, L["zh"])
     sentiment = sentiment or []
     stats = stats or {}
@@ -503,6 +534,8 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
     vp_date = freshness.get("vp_date", "—")
     mf_date = freshness.get("mf_date", "—")
     price_date = freshness.get("price_date", date)
+    mode_lbl = freshness.get("mode", "")
+    mode_chip = f'<span class="chip" style="border-color:var(--cyan);color:var(--cyan)"><b>{mode_lbl}</b></span>' if mode_lbl else ''
     vp_lag = "" if vp_date == date else T["vp_lag"].format(vp_date, mf_date)
     tot = stats.get("total", len(rows))
     succ = f"price{stats.get('price',0)} pos{stats.get('cum80',0)} flow{stats.get('net5',0)} vp{stats.get('turn',0)} tech{stats.get('macd',0)} /{tot}"
@@ -516,6 +549,7 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
     sec_capital = _capital_section(macro, lang)                      # 05 资金面
     sec_patterns = _patterns_section(patterns, lang)                 # 06 回测
     sec_nextbatch = _next_batch_section(rows, patterns, lang)        # 06b 下一批候选(闭环)
+    sec_pullback = _pullback_section(pullback, lang)                 # 06c 潜在低吸埋伏(回踩目标价)
     sec_top10 = _top10_section(rows, lang)                           # 08 TOP10
 
     html = f'''<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8">
@@ -602,6 +636,7 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 <p class="lede">{len(rows)} {T["lede_a"]} {T["lede_b"]}</p>
 <div class="meta">
 <span class="chip">{T["c_data"]} · <b>DataHub (tushare)</b></span>
+{mode_chip}
 <span class="chip">{T["c_price"]} · <b>{price_date}</b></span>
 <span class="chip">{T["c_vp"]} · <b>{vp_date}</b></span>
 <span class="chip">{T["c_flow"]} · <b>{mf_date}</b></span>
@@ -632,6 +667,7 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 {sec_capital}
 {sec_patterns}
 {sec_nextbatch}
+{sec_pullback}
 <section>
 <div class="sec-h"><span class="n">▦</span><h2>{T["s02"]}</h2></div>
 <div class="ind-grid">
