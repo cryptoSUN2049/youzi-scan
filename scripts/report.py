@@ -384,6 +384,61 @@ def _patterns_section(patterns, lang):
 <div class="note" style="margin-top:8px">{L1("胜率=该模式样本中收正比例,均值=平均收益%;红≥60%、绿&lt;45%。T+60(3月)样本较少(需足够前向交易日),仅供趋势参考。","win=% positive, avg=mean %.")}</div></section>'''
 
 
+def _next_batch_section(rows, patterns, lang):
+    """CLOSE THE LOOP: which stocks are TODAY firing a historically high-win pattern = next batch.
+    Join each actionable stock's CURRENT setup × its sector against the backtest win rates."""
+    if not patterns:
+        return ""
+    zh = lang != "en"
+    T2S = {"ambush": "潜伏/低位缩量", "dip": "低吸/回踩MA10", "halfway": "半路/放量", "chase": "打板/涨停"}
+    by_combo = patterns.get("by_combo", {})
+    by_setup = patterns.get("by_setup", {})
+    T = L[lang]
+    cands = []
+    for r in rows:
+        setup = T2S.get(r["tactic"])
+        if not setup:
+            continue  # only actionable setups (skip high/avoid/watch)
+        combo = by_combo.get(f"{setup} @ {r['theme']}")
+        src = combo or by_setup.get(setup)
+        if not src:
+            continue
+        t3 = (src.get("t3") or {}).get("win")
+        t20 = (src.get("t20") or {}).get("win")
+        t20a = (src.get("t20") or {}).get("avg")
+        cands.append({**r, "bt_setup": setup, "bt_t3": t3, "bt_t20": t20, "bt_t20a": t20a, "bt_combo": combo is not None})
+    if not cands:
+        return ""
+    cands.sort(key=lambda x: (-(x["bt_t20"] or 0), -(x["bt_t3"] or 0), -x.get("score", 0)))
+    top = cands[:15]
+    def sl(s):
+        return s if zh else SETUP_EN.get(s, s)
+    trs = ""
+    for i, r in enumerate(top, 1):
+        net5 = (r.get('net5') or 0) / 10000
+        scope = "板块级" if r["bt_combo"] else "模式级"
+        if not zh:
+            scope = "sector" if r["bt_combo"] else "setup"
+        trs += (f'<tr><td class="num">{i}</td><td class="nm">{r["name"]}<small>{r["code"]}</small></td>'
+                f'<td><span class="news-tag">{sl(r["bt_setup"])}</span></td>'
+                f'<td>{CONCEPT_ZH.get(r["theme"], r["theme"]) if zh else r["theme"]}</td>'
+                f'<td class="num"><b>{r["bt_t3"]}%</b></td>'
+                f'<td class="num"><b class="{"up" if (r["bt_t20"] or 0)>=65 else ""}">{r["bt_t20"]}%</b> <span style="color:var(--txt3)">{("+"+str(int(r["bt_t20a"]))) if r.get("bt_t20a") is not None else ""}</span></td>'
+                f'<td class="c" style="font-size:9px;color:var(--txt3)">{scope}</td>'
+                f'<td class="num"><b>{r.get("score","")}</b></td>'
+                f'<td class="num {"up" if net5>=0 else "down"}">{("+" if net5>=0 else "")}{net5:.1f}</td>'
+                f'<td class="vph vph-{_vphcls(r.get("vph","na"))}">{T["vph"].get(r.get("vph","na"),"—")}</td></tr>')
+    L1 = (lambda z, e: z if zh else e)
+    cols = ([L1("#", "#"), L1("票", "Stock"), L1("今日模式", "Setup today"), L1("板块(东财)", "Sector"),
+             "T+3", L1("T+20·1月", "T+20"), L1("胜率口径", "scope"), L1("当前评分", "Score"),
+             L1("5日净亿", "5d(e8)"), L1("量价", "Vol-Price")])
+    th = "".join(f"<th>{c}</th>" for c in cols)
+    return f'''<section>
+<div class="sec-h"><span class="n">▶</span><h2>{L1("下一批候选 · 回测×今日联立","Next batch · backtest × today")}</h2><span class="desc">{L1("今天正在触发历史高胜率模式的票","stocks firing a historically winning pattern today")}</span></div>
+<div class="note" style="margin-bottom:8px">{L1("闭环逻辑:每只票的<b>今日模式</b>(扫描)× 它的<b>板块</b> → 查<b>回测</b>里该「模式×板块」历史胜率 → 排序。「板块级」=有该板块足够样本,「模式级」=用全模式胜率兜底。<b>这才是回测的目的:不是复盘历史,是锁定下一批。</b>","Join today's setup × sector against backtest win-rates.")}</div>
+<div class="tbl-wrap"><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div></section>'''
+
+
 def _top10_section(rows, lang):
     zh = lang != "en"
     LB = {"h": "TOP10 精选" if zh else "TOP10 picks", "d": "综合评分前10(潜伏/低吸优先)" if zh else "by composite score"}
@@ -460,6 +515,7 @@ def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
     sec_macro = _macro_section(macro, lang)                          # 01 全球 / 02 外盘 / 03 大盘
     sec_capital = _capital_section(macro, lang)                      # 05 资金面
     sec_patterns = _patterns_section(patterns, lang)                 # 06 回测
+    sec_nextbatch = _next_batch_section(rows, patterns, lang)        # 06b 下一批候选(闭环)
     sec_top10 = _top10_section(rows, lang)                           # 08 TOP10
 
     html = f'''<!DOCTYPE html><html lang="{lang}"><head><meta charset="UTF-8">
@@ -575,6 +631,7 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 
 {sec_capital}
 {sec_patterns}
+{sec_nextbatch}
 <section>
 <div class="sec-h"><span class="n">▦</span><h2>{T["s02"]}</h2></div>
 <div class="ind-grid">
