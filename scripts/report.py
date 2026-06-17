@@ -314,9 +314,16 @@ def _macro_section(macro, lang):
         idx = "".join(f'<span class="chip"><b>{g["name"]}</b> {g["val"]} <span style="color:var(--txt3)">{g["note"]}</span></span>' for g in ov.get("idx", []))
         aistk = "".join(f'<span class="chip"><b>{s["name"]}</b> {s["px"]} <span class="{"up" if (s["pct"] or 0)>0 else "down"}">{s["pct"]:+}%</span></span>' for s in ov.get("ai_stocks", []))
         ai_row = f'<div class="mac-row" style="margin-top:6px"><span class="mac-l">{L1("AI/科技核心","US AI/tech")}</span>{aistk}</div>' if aistk else ''
+        cw = ov.get("capex_watch")
+        capex_row = ""
+        if cw:
+            ci = "".join(f'<span class="chip"><b>{x["co"]}</b> {x["val"]} <span class="up">{x.get("dir","")}</span></span>' for x in cw.get("items", []))
+            capex_row = (f'<div class="mac-row" style="margin-top:6px"><span class="mac-l">{L1("AI capex跟踪","Hyperscaler capex")}</span>{ci}</div>'
+                         f'<div class="note" style="margin-top:4px;font-size:11px">{cw.get("summary","")}</div>')
         out += f'''<section><div class="sec-h"><span class="n">02</span><h2>{L1("外盘 · 美股AI科技传导","Overseas · US AI/tech")}</h2><span class="desc">{L1("隔夜美股=我们开盘的情绪底色 · 持续跟踪","overnight US sets the tone")}</span></div>
 <div class="mac-row"><span class="mac-l">{L1("指数","Index")}</span>{idx}</div>
 {ai_row}
+{capex_row}
 <div class="kbox" style="margin-top:8px"><div class="kl">{L1("AI/半导体动向","AI/semis")}</div><div style="font-size:12px;color:var(--txt2)">{ov.get("ai","")}</div></div>
 <div class="note" style="margin-top:8px"><b>{L1("解读","Read")}:</b> {ov.get("read","")}</div></section>'''
     # 03 A股大盘复盘

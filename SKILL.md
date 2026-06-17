@@ -53,6 +53,8 @@ python3 pattern_mine.py --symbols ../data/watchlist.csv --end <date> --days 200
 #   - A-share 八大指数: datahub daily_market_digest (consistent with the tape)
 #   - 板块资金流: datahub get_sector_moneyflow_rank   (surfaces rotation, e.g. money leaving the pool)
 #   - 外盘 / 全球新闻 / 公告: AGENT runs WebSearch (US AI/semis, SOX, Fed/FOMC, geopolitics)
+#   - hyperscaler AI capex 跟踪(算力链#1结构性信号): AGENT WebSearch 微软/谷歌/Meta/亚马逊 2026 capex
+#     指引 -> macro.overseas.capex_watch. capex是定性财报新闻=搜索抓(不像股价走datahub). 区分局部砍单vs总量趋势。
 #   - 美股AI/科技核心个股(英伟达/AMD/博通/台积电/巨头): python3 us_basket.py (datahub provider=fmp,
 #     deterministic) -> injects overseas.ai_stocks into /tmp/macro.json (a chips row, tracked每次)
 #   funnel schema: {"date","global_news":[{tag,t,w}],"overseas":{idx,ai,read},
