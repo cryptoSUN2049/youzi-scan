@@ -499,20 +499,45 @@ def _top10_section(rows, lang):
 
 
 def _exec_summary(conclusion, lang):
-    """Section 00. The conclusion is written by the AGENT from the real data (not a template).
-    `conclusion` is an HTML/markdown-ish string. Empty -> a neutral placeholder (never fabricate)."""
+    """Section 00 — the AGENT's conclusion (not a template). To get a clean, modular layout the agent
+    writes it as `@@标题` blocks; each block renders as its own themed card. Falls back to one box."""
     head = "结论先行 · 操作纲领" if lang != "en" else "Executive summary"
     if not conclusion or not conclusion.strip():
         ph = ("(待 agent 基于本报告的真实数据撰写结论——脚本不臆造)" if lang != "en"
               else "(to be written by the agent from the data below — the script does not fabricate)")
-        body = f'<div style="color:var(--txt3);font-style:italic">{ph}</div>'
-    else:
-        # allow simple line breaks; the agent supplies the analytical narrative
-        body = conclusion.replace("\n\n", "</p><p>").replace("\n", "<br>")
-        body = f'<div style="font-size:12.5px;color:var(--txt);line-height:1.75"><p>{body}</p></div>'
+        return f'<section><div class="sec-h"><span class="n">00</span><h2>{head}</h2></div><div class="kbox red"><div style="color:var(--txt3);font-style:italic">{ph}</div></div></section>'
+
+    def tone(t):
+        if "核心" in t or "纲领" in t or "bottom" in t.lower():
+            return "core"
+        if "周期" in t or "宏观" in t or "macro" in t.lower():
+            return "macro"
+        if "回测" in t or "模式" in t or "历史" in t or "backtest" in t.lower():
+            return "bt"
+        if "下一批" in t or "重点" in t or "首选" in t or "pick" in t.lower():
+            return "pick"
+        if "低吸" in t or "埋伏" in t or "恐慌" in t or "pullback" in t.lower():
+            return "dip"
+        if "风险" in t or "纪律" in t or "risk" in t.lower():
+            return "risk"
+        return "mid"
+
+    parts = [p.strip() for p in conclusion.split("@@") if p.strip()]
+    if len(parts) <= 1:   # not in @@ format -> single box (back-compat)
+        body = conclusion.replace("\n", "<br>")
+        return f'<section><div class="sec-h"><span class="n">00</span><h2>{head}</h2></div><div class="kbox red" style="font-size:12.5px;line-height:1.7">{body}</div></section>'
+
+    cards = ""
+    for p in parts:
+        seg = p.split("\n", 1)
+        title = seg[0].strip()
+        body = (seg[1].strip() if len(seg) > 1 else "").replace("\n", "<br>")
+        cls = tone(title)
+        full = ' excl-full' if cls == "core" else ''
+        cards += f'<div class="excl-card t-{cls}{full}"><div class="excl-t">{title}</div><div class="excl-b">{body}</div></div>'
     return f'''<section>
-<div class="sec-h"><span class="n">00</span><h2>{head}</h2></div>
-<div class="kbox red" style="border-left-width:4px">{body}</div></section>'''
+<div class="sec-h"><span class="n">00</span><h2>{head}</h2><span class="desc">{("agent 据真实数据研判 · 分模块" if lang!="en" else "agent analysis · modular")}</span></div>
+<div class="excl-grid">{cards}</div></section>'''
 
 
 def render(rows, out_file, title="AI Compute Chain", date="2026-06-16",
@@ -643,6 +668,19 @@ footer{{border-top:1px solid var(--line);padding:16px 28px 36px;font-size:11px;c
 .news-row:last-child{{border-bottom:none;}}
 .news-tag{{font-size:9.5px;padding:1px 6px;border-radius:7px;background:#13294a;color:#7fb0ff;margin-right:6px;font-weight:700;}}
 .t10{{position:relative;}} .t10-r{{position:absolute;left:-3px;top:-7px;z-index:3;background:var(--gold);color:#0a0e14;border-radius:50%;width:21px;height:21px;display:flex;align-items:center;justify-content:center;font-family:monospace;font-weight:800;font-size:12px;}}
+.excl-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}}
+.excl-card{{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:9px;padding:11px 13px;}}
+.excl-card.excl-full{{grid-column:1/-1;border-left-width:4px;}}
+.excl-t{{font-size:12.5px;font-weight:800;margin-bottom:5px;color:var(--txt);}}
+.excl-b{{font-size:12px;color:var(--txt2);line-height:1.65;}} .excl-b b{{color:var(--txt);}}
+.excl-card.t-core{{border-left-color:var(--up);background:#15100f;}} .excl-card.t-core .excl-t{{color:var(--up);}}
+.excl-card.t-macro{{border-left-color:var(--cyan);}} .excl-card.t-macro .excl-t{{color:var(--cyan);}}
+.excl-card.t-bt{{border-left-color:var(--purple);}} .excl-card.t-bt .excl-t{{color:var(--purple);}}
+.excl-card.t-pick{{border-left-color:var(--g-buy);}} .excl-card.t-pick .excl-t{{color:var(--g-buy);}}
+.excl-card.t-dip{{border-left-color:var(--blue);}} .excl-card.t-dip .excl-t{{color:var(--blue);}}
+.excl-card.t-risk{{border-left-color:var(--gold);}} .excl-card.t-risk .excl-t{{color:var(--gold);}}
+.excl-card.t-mid{{border-left-color:var(--txt3);}}
+@media(max-width:860px){{.excl-grid{{grid-template-columns:1fr;}}}}
 </style></head><body>
 <header>
 <div class="eyebrow">{T["eyebrow"]}</div>
